@@ -702,10 +702,9 @@ class ReactionTrainer:
         # ────────────────────────────────────────────────
         pdf = FPDF()
         pdf.add_page()
-
         # Шрифты
-        pdf.add_font("ArialCyr", "", r"C:\Windows\Fonts\arial.ttf")
-        pdf.add_font("ArialCyr", "B", r"C:\Windows\Fonts\arialbd.ttf")
+        pdf.add_font("ArialCyr", "", r"C:\Windows\Fonts\arial.ttf", uni=True)
+        pdf.add_font("ArialCyr", "B", r"C:\Windows\Fonts\arialbd.ttf", uni=True)
 
         # Заголовок
         pdf.set_font("ArialCyr", "B", 20)
