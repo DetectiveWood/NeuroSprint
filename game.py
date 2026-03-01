@@ -1,3 +1,4 @@
+from testpdf import ReactionReportGenerator
 import pygame
 import sys
 import random
@@ -13,7 +14,6 @@ DB_NAME = 'reaction_trainer.db'
 
 def __init__(self):
     pygame.init()
-
     # Принудительное пересоздание таблиц (для отладки)
     conn = sqlite3.connect('reaction_trainer.db')
     cur = conn.cursor()
@@ -161,6 +161,7 @@ class Button:
 # ====================== ГЛАВНЫЙ КЛАСС ======================
 class ReactionTrainer:
     def __init__(self):
+        self.pdfGen = ReactionReportGenerator()
         pygame.init()
         self.screen = pygame.display.set_mode((1000, 700))
         self.anonymous_mode = False  # по умолчанию выкл
@@ -376,7 +377,7 @@ class ReactionTrainer:
                     elif buttons[2].clicked(pos):
                         self.show_progress_graph()
                     elif buttons[3].clicked(pos):
-                        self.generate_pdf_report()
+                        self.get_user_report_data()
                     elif buttons[4].clicked(pos):
                         self.show_leaderboard()
                     elif anon_btn.clicked(pos):  # клик по анонимности
@@ -468,9 +469,11 @@ class ReactionTrainer:
             self.screen.fill((20, 20, 40))
             if correct:
                 fb = self.big_font.render("Правильно!", True, (0, 255, 100))
+                self.screen.blit(fb, (350, 320))
             else:
                 fb = self.big_font.render("Неправильно!", True, (255, 80, 80))
-            self.screen.blit(fb, (340, 300))
+                self.screen.blit(fb, (330, 320))
+            
             pygame.display.flip()
             pygame.time.wait(400)
 
@@ -736,7 +739,7 @@ class ReactionTrainer:
             self.screen.fill((20, 20, 40))
 
             title = self.med_font.render(f"Сравнение с {other_username}", True, (255, 255, 255))
-            self.screen.blit(title, (250, 100))
+            self.screen.blit(title, (290, 100))
 
             history_btn = Button(300, 200, 400, 80, "Увидеть историю", (0, 180, 0), (0, 220, 0))
             graphs_btn = Button(300, 300, 400, 80, "Увидеть графики", (0, 120, 215), (0, 160, 255))
@@ -1120,6 +1123,72 @@ class ReactionTrainer:
                 os.remove(f)
             except:
                 pass
+
+    def get_user_report_data(self):
+        sessions = get_user_sessions(self.user_id)
+        if not sessions:
+            self.show_message("Нет данных для отчёта", duration=2500)
+            return None
+
+        sessions_sorted = sorted(sessions, key=lambda x: x['date'])
+
+        n = len(sessions_sorted)
+        if n == 0:
+            return None
+
+        # Средние
+        avg_rt   = sum(s['avg_rt']       for s in sessions_sorted) / n
+        avg_acc  = sum(s['accuracy']     for s in sessions_sorted) / n
+        avg_miss = sum(s['misses']       for s in sessions_sorted) / n
+        avg_fa   = sum(s['false_alarms'] for s in sessions_sorted) / n
+        avg_var  = sum(s['variability']  for s in sessions_sorted) / n
+
+        # Изменение RT
+        first = sessions_sorted[0]['avg_rt']
+        last  = sessions_sorted[-1]['avg_rt']
+        if first > 0:
+            pct = 100 * (first - last) / first
+            reaction_change = f"{pct:+.1f}"
+        else:
+            reaction_change = "—"
+
+        last_s = sessions_sorted[-1]
+
+        data = {
+            'user_id': self.username,
+            'report_date': datetime.now().strftime('%d.%m.%Y %H:%M'),
+            'total_sessions': n,
+
+            'avg_reaction': round(avg_rt, 1),
+            'avg_accuracy': round(avg_acc, 1),
+            'avg_misses': round(avg_miss, 1),
+            'avg_false_presses': round(avg_fa, 1),
+            'avg_variability': round(avg_var, 1),
+            'reaction_change': reaction_change,
+
+            'last_session': {
+                'date': last_s['date'],
+                'reaction': round(last_s['avg_rt'], 1),
+                'accuracy': round(last_s['accuracy'], 1),
+                'misses': last_s['misses'],
+                'false_presses': last_s['false_alarms'],
+                'variability': round(last_s['variability'], 1),
+            },
+
+            'progress_data': {
+                'dates': list(range(1, n+1)),
+                'values': [round(s['avg_rt'], 1) for s in sessions_sorted],
+            },
+
+            'mistake_data': {
+                'dates': list(range(1, n+1)),
+                'values': [s['misses'] + s['false_alarms'] for s in sessions_sorted],
+            }
+        }
+        print(data)
+        self.pdfGen.generate_report(data)
+        return data
+
 
 if __name__ == "__main__":
     print("=== Go/No-Go Reaction Trainer запущен ===")
