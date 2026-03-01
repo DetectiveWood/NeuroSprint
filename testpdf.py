@@ -141,9 +141,9 @@ class ReactionReportGenerator:
         #3498DB
         # Настройка внешнего вида с русскими подписями
         plt.grid(True, alpha=0.3, linestyle='--')
-        plt.xlabel('Попытка', fontsize=10, color='#2C3E50')
-        plt.ylabel('Время реакции (мс)', fontsize=10, color='#2C3E50')
-        plt.title('Прогресс времени реакции', fontsize=12, color='#2C3E50', pad=15)
+        plt.xlabel('Номер тренировки', fontsize=10, color='#2C3E50')
+        plt.ylabel('RTS (мс)', fontsize=10, color='#2C3E50')
+        plt.title('Прогресс среднего времени реакции', fontsize=12, color='#2C3E50', pad=15)
         
         # Форматирование дат
         plt.gcf().autofmt_xdate()
@@ -176,9 +176,9 @@ class ReactionReportGenerator:
         
         # Настройка внешнего вида с русскими подписями
         plt.grid(True, alpha=0.3, linestyle='--')
-        plt.xlabel('Попытка', fontsize=10, color='#2C3E50')
-        plt.ylabel('Количество ошибок', fontsize=10, color='#2C3E50')
-        plt.title('Прогресс точности действий', fontsize=12, color='#2C3E50', pad=15)
+        plt.xlabel('Номер тренировки', fontsize=10, color='#2C3E50')
+        plt.ylabel('Прогресс точности (%)', fontsize=10, color='#2C3E50')
+        plt.title('Точность (%)', fontsize=12, color='#2C3E50', pad=15)
         
         # Форматирование дат
         plt.gcf().autofmt_xdate()
