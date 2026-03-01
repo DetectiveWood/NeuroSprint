@@ -163,9 +163,10 @@ class ReactionTrainer:
     def __init__(self):
         pygame.init()
         self.screen = pygame.display.set_mode((1000, 700))
-        # В __init__
+        self.anonymous_mode = False  # по умолчанию выкл
         self.font_emoji = pygame.font.SysFont("segoeuisymbol", 40)  # или "segoe ui emoji", "arial unicode ms"
-        self.font_emoji2 = pygame.font.SysFont("segoeuisymbol", 25)  # или "segoe ui emoji", "arial unicode ms"
+        self.font_emoji2 = pygame.font.SysFont("segoeuisymbol", 20)  # или "segoe ui emoji", "arial unicode ms"
+        self.font_table = pygame.font.SysFont("arial", 28)
         pygame.display.set_caption("Go/No-Go Reaction Trainer")
         self.clock = pygame.time.Clock()
         self.big_font = pygame.font.Font(None, 74)
@@ -321,6 +322,20 @@ class ReactionTrainer:
             for btn in buttons:
                 btn.draw(self.screen)
 
+            # Кнопка Анонимность — ПРАВЫЙ НИЖНИЙ УГОЛ
+            anon_text = f"Анонимность: {'Вкл' if self.anonymous_mode else 'Выкл'}"
+            anon_color = (0, 255, 0) if self.anonymous_mode else (255, 0, 0)
+            anon_hover = (0, 220, 0) if self.anonymous_mode else (220, 0, 0)
+            anon_btn = Button(
+                self.screen.get_width() - 320,  # правый край минус ширина кнопки
+                self.screen.get_height() - 110,  # нижний край минус высота кнопки + запас
+                300, 60,
+                anon_text,
+                anon_color,
+                anon_hover
+            )
+            anon_btn.draw(self.screen)
+
             # Получаем текущий streak
             conn = sqlite3.connect('reaction_trainer.db')
             cur = conn.cursor()
@@ -364,6 +379,20 @@ class ReactionTrainer:
                         self.generate_pdf_report()
                     elif buttons[4].clicked(pos):
                         self.show_leaderboard()
+                    elif anon_btn.clicked(pos):  # клик по анонимности
+                        self.anonymous_mode = not self.anonymous_mode
+                        # Пересоздаём кнопку анонимности, чтобы обновить цвет и текст
+                        anon_text = f"Анонимность: {'Вкл' if self.anonymous_mode else 'Выкл'}"
+                        anon_color = (0, 255, 0) if self.anonymous_mode else (255, 0, 0)
+                        anon_hover = (0, 220, 0) if self.anonymous_mode else (220, 0, 0)
+                        anon_btn = Button(
+                            self.screen.get_width() - 320,
+                            self.screen.get_height() - 110,
+                            300, 60,
+                            anon_text,
+                            anon_color,
+                            anon_hover
+                        )
                     elif buttons[5].clicked(pos):
                         pygame.quit()
                         sys.exit()
@@ -421,12 +450,12 @@ class ReactionTrainer:
                 if is_go:
                     stim_rect = pygame.draw.circle(self.screen, (0, 255, 80), (500, 350), 110)
                     txt = self.big_font.render("GO", True, (0, 0, 0))
-                    self.screen.blit(txt, (435, 310))
+                    self.screen.blit(txt, (460, 325))
                 else:
                     stim_rect = pygame.Rect(390, 240, 220, 220)
                     pygame.draw.rect(self.screen, (255, 50, 50), stim_rect)
                     txt = self.big_font.render("NO GO", True, (0, 0, 0))
-                    self.screen.blit(txt, (410, 310))
+                    self.screen.blit(txt, (415, 325))
 
                 pygame.display.flip()
                 self.clock.tick(60)
@@ -440,8 +469,8 @@ class ReactionTrainer:
             if correct:
                 fb = self.big_font.render("Правильно!", True, (0, 255, 100))
             else:
-                fb = self.big_font.render("Ошибка!", True, (255, 80, 80))
-            self.screen.blit(fb, (360, 300))
+                fb = self.big_font.render("Неправильно!", True, (255, 80, 80))
+            self.screen.blit(fb, (340, 300))
             pygame.display.flip()
             pygame.time.wait(400)
 
@@ -621,7 +650,19 @@ class ReactionTrainer:
             self.clock.tick(60)
 
     def show_leaderboard(self):
-        leaders = get_leaderboard()  # теперь [(username, avg_rt, avg_errors, avg_accuracy), ...]
+        leaders = get_leaderboard()
+
+        conn = sqlite3.connect('reaction_trainer.db')
+        cur = conn.cursor()
+
+        leaders_with_streak = []
+        for username, avg_rt, avg_errors, avg_acc in leaders:
+            cur.execute("SELECT streak FROM users WHERE username = ?", (username,))
+            row = cur.fetchone()
+            streak = row[0] if row else 0
+            leaders_with_streak.append((username, avg_rt, avg_errors, avg_acc, streak))
+
+        conn.close()
 
         while True:
             self.screen.fill((20, 20, 40))
@@ -629,26 +670,146 @@ class ReactionTrainer:
             title = self.med_font.render("Топ-5 по скорости реакции", True, (255, 255, 255))
             self.screen.blit(title, (280, 60))
 
-            if not leaders:
+            if not leaders_with_streak:
                 txt = self.small_font.render("Пока нет участников", True, (255, 200, 100))
                 self.screen.blit(txt, (350, 300))
             else:
-                # Заголовок таблицы
-                header = self.small_font.render("№   Имя            RT     Ошибки   Точность", True, (180, 220, 255))
-                self.screen.blit(header, (100, 120))
-                pygame.draw.line(self.screen, (100, 100, 150), (90, 155), (900, 155), 2)
+                header = self.font_table.render("№  Имя         Реакция      Ошибки   Точность   Стрик", True,
+                                                (180, 220, 255))
+                self.screen.blit(header, (80, 120))
+                pygame.draw.line(self.screen, (100, 100, 150), (70, 155), (920, 155), 2)
 
                 y = 170
-                for rank, (username, avg_rt, avg_errors, avg_acc) in enumerate(leaders, 1):
+                detail_buttons = []  # список для кликабельных квадратиков
+
+                for rank, (username, avg_rt, avg_errors, avg_acc, streak) in enumerate(leaders_with_streak, 1):
                     color = (255, 215, 0) if rank == 1 else (220, 220, 255)
 
-                    # Форматируем строку с выравниванием
-                    line = f"{rank:<3} {username:<14} {avg_rt:>6.1f} мс   {avg_errors:>6.1f}   {avg_acc:>6.1f}%"
-
+                    line = f"{rank:<2}  {username:<10} {avg_rt:>6.1f} мс     {avg_errors:>6.1f}      {avg_acc:>6.1f}%"
                     txt = self.small_font.render(line, True, color)
-                    self.screen.blit(txt, (100, y))
+                    self.screen.blit(txt, (80, y))
+
+                    # 🔥 стрик (остаётся как было)
+                    streak_text = f"🔥 {streak}"
+                    streak_color = (255, 140, 0) if streak > 0 else (150, 150, 150)
+                    streak_surf = self.font_emoji2.render(streak_text, True, streak_color)
+                    self.screen.blit(streak_surf, (80 + txt.get_width() + 40, y-5))
+
+                    # Маленький квадратик "Подробнее" — теперь 28×28
+                    detail_rect = pygame.Rect(900, y - 3, 24, 24)  # +6 по y для центрирования по строке
+                    pygame.draw.rect(self.screen, (100, 100, 255), detail_rect, border_radius=5)  # закругление меньше
+                    detail_text = self.small_font.render("...", True, (255, 255, 255))
+                    self.screen.blit(detail_text, (detail_rect.centerx - detail_text.get_width() // 2,
+                                                   detail_rect.centery - detail_text.get_height() // 2))
+
+                    detail_buttons.append((detail_rect, username))
 
                     y += 45
+
+            back_btn = Button(380, 580, 240, 70, "Назад", (0, 120, 215), (0, 160, 255))
+            back_btn.draw(self.screen)
+
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    pos = event.pos
+                    if back_btn.clicked(pos):
+                        return
+
+                    # Проверяем клик по значкам "Подробнее"
+                    for rect, username in detail_buttons:
+                        if rect.collidepoint(pos):
+                            if self.anonymous_mode:
+                                self.show_message("Анонимный режим включён — сравнение недоступно",
+                                                  color=(255, 100, 100))
+                            else:
+                                self.show_compare_menu(username)
+                            break
+
+            pygame.display.flip()
+            self.clock.tick(30)
+
+    def show_compare_menu(self, other_username):
+        while True:
+            self.screen.fill((20, 20, 40))
+
+            title = self.med_font.render(f"Сравнение с {other_username}", True, (255, 255, 255))
+            self.screen.blit(title, (250, 100))
+
+            history_btn = Button(300, 200, 400, 80, "Увидеть историю", (0, 180, 0), (0, 220, 0))
+            graphs_btn = Button(300, 300, 400, 80, "Увидеть графики", (0, 120, 215), (0, 160, 255))
+
+            history_btn.draw(self.screen)
+            graphs_btn.draw(self.screen)
+
+            back_btn = Button(380, 500, 240, 70, "Назад", (0, 120, 215), (0, 160, 255))
+            back_btn.draw(self.screen)
+
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    pos = event.pos
+                    if history_btn.clicked(pos):
+                        self.show_compare_history(other_username)
+                    elif graphs_btn.clicked(pos):
+                        self.show_compare_graphs(other_username)
+                    elif back_btn.clicked(pos):
+                        return
+
+            pygame.display.flip()
+            self.clock.tick(30)
+
+    def show_compare_history(self, other_username):
+        # Получаем ID другого пользователя
+        conn = sqlite3.connect('reaction_trainer.db')
+        cur = conn.cursor()
+        cur.execute("SELECT id FROM users WHERE username = ?", (other_username,))
+        row = cur.fetchone()
+        other_id = row[0] if row else None
+        conn.close()
+
+        if other_id is None:
+            self.show_message("Пользователь не найден", color=(255, 100, 100))
+            return
+
+        other_sessions = get_user_sessions(other_id)
+        my_sessions = get_user_sessions(self.user_id)
+
+        if len(other_sessions) == 0 and len(my_sessions) == 0:
+            self.show_message("Нет историй для сравнения", color=(255, 200, 100))
+            return
+
+        while True:
+            self.screen.fill((20, 20, 40))
+
+            title = self.med_font.render(f"Сравнение истории: {other_username}", True, (255, 255, 255))
+            self.screen.blit(title, (280, 40))
+
+            # Левая колонка — чужая история (ближе к левому краю)
+            left_title = self.small_font.render(f"{other_username}", True, (255, 200, 100))
+            self.screen.blit(left_title, (20, 100))
+
+            y = 140
+            for sess in other_sessions[:10]:
+                line = f"{sess['date'][:10]} | RT: {sess['avg_rt']:.1f} мс | Acc: {sess['accuracy']:.1f}%"
+                txt = self.small_font.render(line, True, (200, 220, 255))  # светло-синий
+                self.screen.blit(txt, (20, y))
+                y += 35  # расстояние между строками чужой истории
+
+            # Правая колонка — твоя история (другой цвет + большее расстояние)
+            right_title = self.small_font.render("Твоя история", True, (100, 255, 100))
+            self.screen.blit(right_title, (520, 100))
+
+            y = 140
+            for sess in my_sessions[:10]:
+                line = f"{sess['date'][:10]} | RT: {sess['avg_rt']:.1f} мс | Acc: {sess['accuracy']:.1f}%"
+                txt = self.small_font.render(line, True, (120, 255, 120))  # ярко-зелёный
+                self.screen.blit(txt, (520, y))
+                y += 35  # большее расстояние между твоими строками
 
             back_btn = Button(380, 580, 240, 70, "Назад", (0, 120, 215), (0, 160, 255))
             back_btn.draw(self.screen)
@@ -664,6 +825,114 @@ class ReactionTrainer:
             pygame.display.flip()
             self.clock.tick(30)
 
+    def show_compare_graphs(self, other_username):
+        conn = sqlite3.connect('reaction_trainer.db')
+        cur = conn.cursor()
+        cur.execute("SELECT id FROM users WHERE username = ?", (other_username,))
+        row = cur.fetchone()
+        other_id = row[0] if row else None
+        conn.close()
+
+        if other_id is None:
+            self.show_message("Пользователь не найден", color=(255, 100, 100))
+            return
+
+        other_sessions = get_user_sessions(other_id)
+        my_sessions = get_user_sessions(self.user_id)
+
+        if len(other_sessions) < 2 or len(my_sessions) < 2:
+            self.show_message("Недостаточно данных для сравнения графиков", color=(255, 200, 100))
+            return
+
+        my_sorted = sorted(my_sessions, key=lambda x: x['date'])
+        other_sorted = sorted(other_sessions, key=lambda x: x['date'])
+
+        my_numbers = list(range(1, len(my_sorted) + 1))
+        my_rts = [s['avg_rt'] for s in my_sorted]
+        my_acc = [s['accuracy'] for s in my_sorted]
+
+        other_numbers = list(range(1, len(other_sorted) + 1))
+        other_rts = [s['avg_rt'] for s in other_sorted]
+        other_acc = [s['accuracy'] for s in other_sorted]
+
+        # График (большой размер)
+        plt.figure(figsize=(9.5, 7.0), facecolor='#141428', dpi=180)
+
+        plt.subplot(2, 1, 1)
+        plt.plot(my_numbers, my_rts, marker='o', linewidth=3, color='#00FF9F', label='Ты', markersize=8)
+        plt.plot(other_numbers, other_rts, marker='s', linewidth=3, color='#FF6B6B', label=f'{other_username}',
+                 markersize=8)
+        plt.title('Сравнение среднего времени реакции', fontsize=15, color='white', fontweight='bold')
+        plt.ylabel('Среднее RT (мс)', color='white')
+        plt.tick_params(colors='white', labelsize=11)
+        plt.gca().set_facecolor('#141428')
+        plt.grid(True, alpha=0.3, color='gray')
+        plt.legend(fontsize=10, labelcolor='black')
+
+        plt.subplot(2, 1, 2)
+        plt.plot(my_numbers, my_acc, marker='o', linewidth=3, color='#00FF9F', label='Ты', markersize=8)
+        plt.plot(other_numbers, other_acc, marker='s', linewidth=3, color='#FF6B6B', label=f'{other_username}',
+                 markersize=8)
+        plt.title('Сравнение точности (%)', fontsize=15, color='white', fontweight='bold')
+        plt.xlabel('Номер тренировки', color='white')
+        plt.ylabel('Точность (%)', color='white')
+        plt.tick_params(colors='white', labelsize=11)
+        plt.gca().set_facecolor('#141428')
+        plt.grid(True, alpha=0.3, color='gray')
+        plt.legend(fontsize=10, labelcolor='black')
+
+        plt.tight_layout(pad=1.5)
+
+        graph_path = "temp_compare.png"
+        plt.savefig(graph_path, facecolor='#141428', dpi=180)
+        plt.close()
+
+        try:
+            graph = pygame.image.load(graph_path)
+            graph = pygame.transform.smoothscale(graph, (920, 720))  # большой размер
+        except:
+            graph = None
+
+        # Прокрутка
+        scroll_y = 0
+        scroll_speed = 60  # увеличил скорость для удобства
+        graph_height = 720
+        content_top = 80
+        content_bottom = content_top + graph_height + 80  # отступ после второго графика
+        max_scroll = self.screen.get_height() - content_bottom  # когда конец контента виден
+        max_scroll = min(0, max_scroll)  # не больше 0
+
+        back_btn = Button(380, self.screen.get_height() - 80, 240, 70, "Назад", (0, 120, 215), (0, 160, 255))
+
+        while True:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    pos = event.pos
+                    # Кнопка активна ТОЛЬКО если прокручено до конца
+                    if scroll_y <= max_scroll and back_btn.clicked(pos):
+                        return
+                if event.type == pygame.MOUSEWHEEL:
+                    scroll_y += event.y * scroll_speed
+                    scroll_y = min(0, max(max_scroll, scroll_y))  # ограничиваем
+
+            self.screen.fill((20, 20, 40))
+
+            if graph:
+                self.screen.blit(graph, (40, content_top + scroll_y))
+            else:
+                txt = self.med_font.render("Не удалось построить график сравнения", True, (255, 100, 100))
+                self.screen.blit(txt, (200, 300 + scroll_y))
+
+            # Кнопка появляется ТОЛЬКО когда прокручено до конца
+            if scroll_y <= max_scroll:
+                back_btn.draw(self.screen)
+
+            pygame.display.flip()
+            self.clock.tick(60)
+
     def show_progress_graph(self):
         sessions = get_user_sessions(self.user_id)
 
@@ -671,7 +940,7 @@ class ReactionTrainer:
             while True:
                 self.screen.fill((20, 20, 40))
                 txt = self.med_font.render("Недостаточно данных для графика", True, (255, 200, 100))
-                self.screen.blit(txt, (250, 300))
+                self.screen.blit(txt, (220, 300))
                 back_btn = Button(380, 520, 240, 70, "Назад", (0, 120, 215), (0, 160, 255))
                 back_btn.draw(self.screen)
 
@@ -686,222 +955,171 @@ class ReactionTrainer:
                 self.clock.tick(30)
             return
 
-        # Сортируем сессии от самой старой к новой
+        # Сортируем сессии
         sessions_sorted = sorted(sessions, key=lambda x: x['date'])
-
-        # Номера тренировок — строго целые числа: 1, 2, 3, ...
         training_numbers = list(range(1, len(sessions_sorted) + 1))
+
         rts = [s['avg_rt'] for s in sessions_sorted]
+        accuracy = [s['accuracy'] for s in sessions_sorted]
 
-        # Построение графика
-        plt.figure(figsize=(9, 5), facecolor='#141428', dpi=180)  # высокое разрешение
-
-        # Линия + точки с белой обводкой
-        plt.plot(training_numbers, rts,
-                 marker='o',
-                 linewidth=3.5,
-                 color='#00ff88',
-                 markersize=10,
-                 markeredgecolor='white',
-                 markeredgewidth=1.5)
-
-        # Текст белый, жирный, чёткий
-        plt.title('Прогресс по тренировкам', fontsize=18, color='white', fontweight='bold', pad=20)
-        plt.xlabel('Номер тренировки', fontsize=14, color='white', labelpad=10)
-        plt.ylabel('Среднее время реакции (мс)', fontsize=14, color='white', labelpad=10)
-
-        # Метки осей — белые
-        plt.tick_params(axis='both', colors='white', labelsize=12)
-
-        # Тёмный фон осей
+        # График 1: Среднее время реакции
+        plt.figure(figsize=(9, 5), facecolor='#141428', dpi=180)
+        plt.plot(training_numbers, rts, marker='o', linewidth=3, color='#00FF9F', markersize=9)
+        plt.title('Прогресс среднего времени реакции', fontsize=16, color='white')
+        plt.xlabel('Номер тренировки', fontsize=12, color='white')
+        plt.ylabel('Среднее RT (мс)', fontsize=12, color='white')
+        plt.tick_params(colors='white', labelsize=10)
         plt.gca().set_facecolor('#141428')
-
-        # Сетка
-        plt.grid(True, alpha=0.4, color='gray', linestyle='--')
-
-        # Принудительно только целые числа на оси X
-        plt.xticks(training_numbers, [str(i) for i in training_numbers])
-
+        plt.grid(True, alpha=0.3, color='gray', linestyle='--')
+        plt.xticks(training_numbers)
         plt.tight_layout()
-
-        graph_path = "temp_progress.png"
-        plt.savefig(graph_path,
-                    facecolor='#141428',
-                    bbox_inches='tight',
-                    dpi=180,
-                    pad_inches=0.3)
+        plt.savefig("temp_rt.png", facecolor='#141428', dpi=180)
         plt.close()
 
-        # Загрузка в pygame с плавным масштабированием
+        # График 2: Точность
+        plt.figure(figsize=(9, 5), facecolor='#141428', dpi=180)
+        plt.plot(training_numbers, accuracy, marker='s', linewidth=3, color='#4DA6FF', markersize=9)
+        plt.title('Прогресс точности (%)', fontsize=16, color='white')
+        plt.xlabel('Номер тренировки', fontsize=12, color='white')
+        plt.ylabel('Точность (%)', fontsize=12, color='white')
+        plt.tick_params(colors='white', labelsize=10)
+        plt.gca().set_facecolor('#141428')
+        plt.grid(True, alpha=0.3, color='gray', linestyle='--')
+        plt.xticks(training_numbers)
+        plt.tight_layout()
+        plt.savefig("temp_acc.png", facecolor='#141428', dpi=180)
+        plt.close()
+
+        # Загрузка графиков
         try:
-            graph = pygame.image.load(graph_path)
-            graph = pygame.transform.smoothscale(graph, (860, 480))
-        except Exception as e:
-            print("Ошибка загрузки графика:", e)
-            graph = None
+            graph_rt = pygame.image.load("temp_rt.png")
+            graph_rt = pygame.transform.smoothscale(graph_rt, (860, 480))
+            graph_acc = pygame.image.load("temp_acc.png")
+            graph_acc = pygame.transform.smoothscale(graph_acc, (860, 480))
+        except:
+            graph_rt = graph_acc = None
+
+        # Прокрутка
+        scroll_y = 0
+        scroll_speed = 30
+        max_scroll = -480  # максимальное смещение вниз (высота второго графика)
+
+        back_btn = Button(380, 600, 240, 70, "Назад", (0, 120, 215), (0, 160, 255))
 
         while True:
-            self.screen.fill((20, 20, 40))
-
-            if graph:
-                self.screen.blit(graph, (70, 90))
-            else:
-                txt = self.med_font.render("Не удалось построить график", True, (255, 100, 100))
-                self.screen.blit(txt, (250, 300))
-
-            back_btn = Button(380, 600, 240, 70, "Назад", (0, 120, 215), (0, 160, 255))
-            back_btn.draw(self.screen)
-
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     pygame.quit()
                     sys.exit()
                 if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                    if back_btn.clicked(event.pos):
-                        return
+                    if back_btn.clicked(event.pos) and scroll_y <= max_scroll:
+                        return  # выход только если прокручено до конца
+                if event.type == pygame.MOUSEWHEEL:
+                    scroll_y += event.y * scroll_speed
+                    scroll_y = min(0, max(max_scroll, scroll_y))  # ограничиваем: от 0 до max_scroll
+
+            self.screen.fill((20, 20, 40))
+
+            # Рисуем графики с учётом прокрутки
+            if graph_rt:
+                self.screen.blit(graph_rt, (70, 80 + scroll_y))
+            if graph_acc:
+                self.screen.blit(graph_acc, (70, 580 + scroll_y))
+
+            # Кнопка "Назад" видна ТОЛЬКО когда прокручено до конца
+            if scroll_y <= max_scroll:
+                back_btn.draw(self.screen)
 
             pygame.display.flip()
-            self.clock.tick(30)
+            self.clock.tick(60)
 
     def generate_pdf_report(self):
         sessions = get_user_sessions(self.user_id)
         if not sessions:
-            self.show_message("Нет данных для отчёта", duration=2500, color=(255, 200, 100))
+            self.show_message("Нет данных для отчёта", duration=2500)
             return
 
-        # Подготовка данных
         sessions_sorted = sorted(sessions, key=lambda x: x['date'])
         last = sessions_sorted[-1]
 
-        # Прогресс
-        if len(sessions) >= 2 and sessions_sorted[0]['avg_rt'] > 0:
-            rt_change_pct = ((sessions_sorted[0]['avg_rt'] - last['avg_rt']) / sessions_sorted[0]['avg_rt']) * 100
-            progress_text = f"Прогресс: {rt_change_pct:+.1f}% быстрее с первой тренировки"
-            progress_color = (0, 255, 159) if rt_change_pct > 0 else (255, 120, 120)
-        else:
-            progress_text = "Пока недостаточно данных для оценки прогресса"
-            progress_color = (180, 180, 180)  # серый — нейтральный цвет
-
-        # Средние
+        # Средние значения
         avg_rt = sum(s['avg_rt'] for s in sessions) / len(sessions)
         avg_acc = sum(s['accuracy'] for s in sessions) / len(sessions)
         avg_var = sum(s['variability'] for s in sessions) / len(sessions)
 
-        # Данные для графиков
+        # Графики
         training_numbers = list(range(1, len(sessions_sorted) + 1))
         rts = [s['avg_rt'] for s in sessions_sorted]
-        errors = [s['misses'] + s['false_alarms'] for s in sessions_sorted]
+        accuracy = [s['accuracy'] for s in sessions_sorted]
 
-        # График 1: Среднее время реакции
-        plt.figure(figsize=(7.2, 3.5), facecolor='#141428', dpi=180)
-        plt.plot(training_numbers, rts,
-                 marker='o', linewidth=2.8, color='#00FF9F',
-                 markersize=8, markeredgecolor='white', markeredgewidth=1.2)
-
-        plt.title('Среднее время реакции', fontsize=14, color='white')
-        plt.xlabel('Номер тренировки', fontsize=10, color='white')
-        plt.ylabel('RT (мс)', fontsize=10, color='white')
-        plt.tick_params(axis='both', colors='white', labelsize=9)
-        plt.gca().set_facecolor('#141428')
-        plt.grid(True, alpha=0.3, color='gray', linestyle='--')
-        plt.xticks(training_numbers, [str(i) for i in training_numbers])
-        plt.tight_layout(pad=0.8)
-
-        graph_rt_path = "temp_rt.png"
-        plt.savefig(graph_rt_path, facecolor='#141428', bbox_inches='tight', dpi=180)
+        # График 1 — Время реакции
+        plt.figure(figsize=(7.5, 3.6), facecolor='#141428', dpi=200)
+        plt.plot(training_numbers, rts, marker='o', linewidth=3, color='#00FF9F')
+        plt.title('Прогресс среднего времени реакции', color='white')
+        plt.xlabel('Номер тренировки', color='white')
+        plt.ylabel('RT (мс)', color='white')
+        plt.tick_params(colors='white')
+        plt.grid(True, alpha=0.3)
+        plt.xticks(training_numbers)
+        plt.tight_layout()
+        plt.savefig("temp_rt.png", facecolor='#141428', dpi=200)
         plt.close()
 
-        # График 2: Ошибки
-        plt.figure(figsize=(7.2, 3.5), facecolor='#141428', dpi=180)
-        plt.plot(training_numbers, errors,
-                 marker='s', linewidth=2.8, color='#FF6B6B',
-                 markersize=8, markeredgecolor='white', markeredgewidth=1.2)
-
-        plt.title('Количество ошибок', fontsize=14, color='white')
-        plt.xlabel('Номер тренировки', fontsize=10, color='white')
-        plt.ylabel('Ошибки', fontsize=10, color='white')
-        plt.tick_params(axis='both', colors='white', labelsize=9)
-        plt.gca().set_facecolor('#141428')
-        plt.grid(True, alpha=0.3, color='gray', linestyle='--')
-        plt.xticks(training_numbers, [str(i) for i in training_numbers])
-        plt.tight_layout(pad=0.8)
-
-        graph_errors_path = "temp_errors.png"
-        plt.savefig(graph_errors_path, facecolor='#141428', bbox_inches='tight', dpi=180)
+        # График 2 — Точность
+        plt.figure(figsize=(7.5, 3.6), facecolor='#141428', dpi=200)
+        plt.plot(training_numbers, accuracy, marker='s', linewidth=3, color='#4DA6FF')
+        plt.title('Прогресс точности', color='white')
+        plt.xlabel('Номер тренировки', color='white')
+        plt.ylabel('Точность (%)', color='white')
+        plt.tick_params(colors='white')
+        plt.grid(True, alpha=0.3)
+        plt.xticks(training_numbers)
+        plt.tight_layout()
+        plt.savefig("temp_acc.png", facecolor='#141428', dpi=200)
         plt.close()
 
-        # PDF — возвращаем старый стиль с подложками и рамкой
+        # PDF
         pdf = FPDF()
         pdf.add_page()
 
         pdf.add_font("Arial", "", r"C:\Windows\Fonts\arial.ttf", uni=True)
         pdf.add_font("Arial", "B", r"C:\Windows\Fonts\arialbd.ttf", uni=True)
 
-        # Заголовок
         pdf.set_font("Arial", "B", 20)
         pdf.cell(0, 15, "Go/No-Go Тренажёр — Отчёт", ln=1, align="C")
-        pdf.ln(8)
 
-        # Основной блок с подложкой и рамкой
-        pdf.set_fill_color(20, 20, 40)  # тёмная подложка
-        pdf.rect(8, pdf.get_y(), 194, 85, style='F')
-
-        pdf.set_xy(15, pdf.get_y() + 8)
-        pdf.set_font("Arial", "B", 15)
-        pdf.set_text_color(0, 255, 159)
-        pdf.cell(0, 10, "Основные показатели", ln=1)
-
-        pdf.set_font("Arial", "", 13)
-        pdf.set_text_color(240, 240, 255)
-
-        pdf.cell(0, 9, f"Пользователь: {self.username}", ln=1)
-        pdf.cell(0, 9, f"Дата отчёта: {datetime.now().strftime('%d.%m.%Y %H:%M')}", ln=1)
-        pdf.cell(0, 9, f"Всего тренировок: {len(sessions)}", ln=1)
-        pdf.ln(5)
-
-        pdf.cell(0, 9, f"Среднее время реакции: {avg_rt:.1f} мс", ln=1)
-        pdf.cell(0, 9, f"Средняя точность: {avg_acc:.1f}%", ln=1)
-        pdf.cell(0, 9, f"Средняя вариабельность: {avg_var:.1f} мс", ln=1)
-        pdf.ln(8)
-
-        pdf.set_font("Arial", "", 13)
-        pdf.set_text_color(*progress_color)
-        pdf.multi_cell(0, 10, progress_text)
-
+        pdf.set_font("Arial", "", 14)
+        pdf.cell(0, 10, f"Пользователь: {self.username}", ln=1)
+        pdf.cell(0, 10, f"Дата: {datetime.now().strftime('%d.%m.%Y %H:%M')}", ln=1)
+        pdf.cell(0, 10, f"Всего тренировок: {len(sessions)}", ln=1)
         pdf.ln(10)
 
+        pdf.set_font("Arial", "", 13)
+        pdf.cell(0, 10, f"Среднее время реакции: {avg_rt:.1f} мс", ln=1)
+        pdf.cell(0, 10, f"Средняя точность: {avg_acc:.1f}%", ln=1)
+        pdf.cell(0, 10, f"Средняя вариабельность: {avg_var:.1f} мс", ln=1)
+        pdf.ln(15)
+
         # Графики
-        pdf.add_page()
         pdf.set_font("Arial", "B", 14)
-        pdf.set_text_color(0, 255, 159)
-        pdf.cell(0, 10, "Прогресс среднего времени реакции", ln=1, align="C")
-
-        if os.path.exists(graph_rt_path):
-            pdf.image(graph_rt_path, x=12, y=pdf.get_y() + 2, w=186)
-            pdf.ln(90)  # уменьшенный отступ
-        else:
-            pdf.cell(0, 10, "(график не удалось создать)", ln=1, align="C")
+        pdf.cell(0, 10, "Прогресс среднего времени реакции", ln=1)
+        if os.path.exists("temp_rt.png"):
+            pdf.image("temp_rt.png", x=10, y=pdf.get_y(), w=190)
+            pdf.ln(95)
 
         pdf.set_font("Arial", "B", 14)
-        pdf.set_text_color(255, 107, 107)
-        pdf.cell(0, 10, "Прогресс количества ошибок", ln=1, align="C")
-
-        if os.path.exists(graph_errors_path):
-            pdf.image(graph_errors_path, x=12, y=pdf.get_y() + 2, w=186)
-        else:
-            pdf.cell(0, 10, "(график не удалось создать)", ln=1, align="C")
+        pdf.cell(0, 10, "Прогресс точности (%)", ln=1)
+        if os.path.exists("temp_acc.png"):
+            pdf.image("temp_acc.png", x=10, y=pdf.get_y(), w=190)
 
         pdf.output("reaction_report.pdf")
-        print("PDF сохранён →", os.path.abspath("reaction_report.pdf"))
 
-        # Удаление временных файлов
-        for path in [graph_rt_path, graph_errors_path]:
+        # Удаляем временные файлы
+        for f in ["temp_rt.png", "temp_acc.png"]:
             try:
-                os.remove(path)
+                os.remove(f)
             except:
                 pass
-
-        self.show_message("Отчёт сохранён в reaction_report.pdf", duration=3000, color=(0, 255, 120))
 
 if __name__ == "__main__":
     print("=== Go/No-Go Reaction Trainer запущен ===")
