@@ -4,10 +4,14 @@ class TextAlign:
     ALIGN_RIGHT = 0
 
 class BorderStyle:
-    COLOR : tuple = (255,100,100)
-    DISABLED_COLOR : tuple = (0,0,0)
-    PRESED_COLOR : tuple = (0,0,0)
-    HOVER_COLOR : tuple = (100,100,100)
+    def __init__(self):
+        self.COLOR : tuple = (255,100,100)
+        self.DISABLED_COLOR : tuple = (0,0,0)
+        self.PRESED_COLOR : tuple = (0,0,0)
+        self.HOVER_COLOR : tuple = (100,100,100)
+        self.BORDER_SIZE : int = 1
+        self.BORDER_RADIUS : int = 0
+        self.BORDER_COLOR : tuple = (0,0,0)
 
 class Padding:
     def __init__(self, left=1, right=1, bottom=1, top=1):
@@ -34,6 +38,9 @@ class Widget:
         self.size : int = 1
 
     def update(self):
+        pass
+
+    def check_events(self,event):
         pass
 
     def resize(self):

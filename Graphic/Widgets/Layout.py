@@ -34,6 +34,10 @@ class LayoutH(Widget):
         for child in self.children:
             child.update()
 
+    def check_events(self, event):
+        for child in self.children:
+            child.check_events(event)
+
 class LayoutV(Widget):
     def __init__(self):
         super().__init__()
@@ -68,3 +72,7 @@ class LayoutV(Widget):
     def update(self):
         for child in self.children:
             child.update()
+        
+    def check_events(self, event):
+        for child in self.children:
+            child.check_events(event)
