@@ -10,13 +10,14 @@ class LayoutH(Widget):
     def calc_size(self):
         size_OC = self.width / self.Space
         print(f"self.width:{self.width},self.size:{self.Space},self.width / self.size:{self.width / self.Space}")
+        index = 0
         for child in self.children:
             child.width = (child.size*size_OC)-(child.padding.left + child.padding.right)
             child.height = self.height-(child.padding.top + child.padding.bottom)
-            child.x = (self.x + ((child.size*size_OC)* (self.children.index(child)))+child.padding.left)
-            print(f"child:{child}, self.children.index(child): {self.children.index(child)}, self.x:{self.x},child.x: {child.x }")
+            child.x = (self.x + ((child.size*size_OC)* index)+child.padding.left)
             child.y = self.y +child.padding.top
             child.resize()
+            index += child.size
 
     def add_widget(self, widget : Widget):
         self.children.append(widget)
@@ -42,12 +43,14 @@ class LayoutV(Widget):
 
     def calc_size(self):
         size_OC = self.height / self.Space
+        index : int = 0
         for child in self.children:
             child.height = (child.size*size_OC)-(child.padding.top + child.padding.bottom)
             child.width = (self.width)-(child.padding.left + child.padding.right)
             child.x = self.x +child.padding.left
-            child.y = self.y + ((child.size*size_OC)* self.children.index(child))+child.padding.top
+            child.y = self.y + ((child.size*size_OC)* index)+child.padding.top
             child.resize()
+            index += child.size
 
     def add_widget(self, widget : Widget):
         self.children.append(widget)

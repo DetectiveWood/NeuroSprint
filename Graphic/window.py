@@ -31,8 +31,9 @@ class Window:
 
     def setTestScreen(self):
         empty = Widget()
-        bt1 = Button()
+        bt1 = Button('asd')
         bt1.style.COLOR = (100,100,255)
+        bt1.size = 2
         self.mainLabel.add_widget(empty)
         self.layout = LayoutV()
         self.mainLabel.add_widget(self.layout)

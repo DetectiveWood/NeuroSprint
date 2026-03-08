@@ -1,3 +1,14 @@
+class TextAlign:
+    ALIGN_CENTER = 0
+    ALIGN_LEFT = 0
+    ALIGN_RIGHT = 0
+
+class BorderStyle:
+    COLOR : tuple = (255,100,100)
+    DISABLED_COLOR : tuple = (0,0,0)
+    PRESED_COLOR : tuple = (0,0,0)
+    HOVER_COLOR : tuple = (100,100,100)
+
 class Padding:
     def __init__(self, left=1, right=1, bottom=1, top=1):
         self.left = left
